@@ -16,6 +16,9 @@ pub struct Auth {
 
 impl Auth {
     pub fn new(config: Arc<Config>) -> io::Result<Auth> {
+        if let Some(timeout) = config.pam.cache_timeout {
+            crate::cache::cached::set_pamcache_timeout(timeout);
+        }
         Ok(Auth { config })
     }
 
