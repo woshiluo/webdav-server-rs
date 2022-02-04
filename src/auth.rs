@@ -11,28 +11,12 @@ type HttpRequest = http::Request<hyper::Body>;
 
 #[derive(Clone)]
 pub struct Auth {
-    config:   Arc<Config>,
-    #[cfg(feature = "pam")]
-    pam_auth: pam_sandboxed::PamAuth,
+    config: Arc<Config>,
 }
 
 impl Auth {
     pub fn new(config: Arc<Config>) -> io::Result<Auth> {
-        // initialize pam.
-        #[cfg(feature = "pam")]
-        let pam_auth = {
-            // set cache timeouts.
-            if let Some(timeout) = config.pam.cache_timeout {
-                crate::cache::cached::set_pamcache_timeout(timeout);
-            }
-            pam_sandboxed::PamAuth::new(config.pam.threads.clone())?
-        };
-
-        Ok(Auth {
-            #[cfg(feature = "pam")]
-            pam_auth,
-            config,
-        })
+        Ok(Auth { config })
     }
 
     // authenticate user.
@@ -41,8 +25,7 @@ impl Auth {
         req: &'a HttpRequest,
         location: &Location,
         _remote_ip: SocketAddr,
-    ) -> Result<String, StatusCode>
-    {
+    ) -> Result<String, StatusCode> {
         // we must have a login/pass
         let basic = match req.headers().typed_get::<Authorization<Basic>>() {
             Some(Authorization(basic)) => basic,
@@ -64,7 +47,7 @@ impl Auth {
             None => {
                 debug!("need authentication, but auth-type is not set");
                 Err(StatusCode::UNAUTHORIZED)
-            },
+            }
         }
     }
 
@@ -76,8 +59,7 @@ impl Auth {
         user: &'a str,
         pass: &'a str,
         remote_ip: SocketAddr,
-    ) -> Result<String, StatusCode>
-    {
+    ) -> Result<String, StatusCode> {
         // stringify the remote IP address.
         let ip = remote_ip.ip();
         let ip_string = if ip.is_loopback() {
@@ -98,8 +80,7 @@ impl Auth {
 
         // authenticate.
         let service = self.config.pam.service.as_str();
-        let pam_auth = self.pam_auth.clone();
-        match crate::cache::cached::pam_auth(pam_auth, service, user, pass, ip_ref).await {
+        match crate::cache::cached::pam_auth(service, user, pass, ip_ref).await {
             Ok(_) => Ok(user.to_string()),
             Err(_) => {
                 debug!(
@@ -107,7 +88,7 @@ impl Auth {
                     service, user, ip_ref
                 );
                 Err(StatusCode::UNAUTHORIZED)
-            },
+            }
         }
     }
 
@@ -117,8 +98,7 @@ impl Auth {
         user: &'a str,
         pass: &'a str,
         section: &'a str,
-    ) -> Result<String, StatusCode>
-    {
+    ) -> Result<String, StatusCode> {
         // Get the htpasswd.WHATEVER section from the config file.
         let file = match self.config.htpasswd.get(section) {
             Some(section) => section.htpasswd.as_str(),
@@ -132,7 +112,7 @@ impl Auth {
                 Err(e) => {
                     debug!("{}: {}", file, e);
                     return Err(StatusCode::UNAUTHORIZED);
-                },
+                }
             };
             let lines = data
                 .split('\n')

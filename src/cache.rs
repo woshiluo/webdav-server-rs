@@ -14,18 +14,18 @@ pub struct Cache<K, V> {
 
 struct Intern<K, V> {
     maxsize: usize,
-    maxage:  Duration,
-    map:     HashMap<K, Arc<V>>,
-    fifo:    VecDeque<(Instant, K)>,
+    maxage: Duration,
+    map: HashMap<K, Arc<V>>,
+    fifo: VecDeque<(Instant, K)>,
 }
 
 impl<K: Hash + Eq + Clone, V> Cache<K, V> {
     pub fn new() -> Cache<K, V> {
         let i = Intern {
             maxsize: 0,
-            maxage:  Duration::new(0, 0),
-            map:     HashMap::new(),
-            fifo:    VecDeque::new(),
+            maxage: Duration::new(0, 0),
+            map: HashMap::new(),
+            fifo: VecDeque::new(),
         };
         Cache {
             intern: Mutex::new(i),
@@ -104,13 +104,13 @@ pub(crate) mod cached {
     use lazy_static::lazy_static;
 
     struct Timeouts {
-        pwcache:  Duration,
+        pwcache: Duration,
         pamcache: Duration,
     }
 
     lazy_static! {
         static ref TIMEOUTS: Mutex<Timeouts> = Mutex::new(Timeouts {
-            pwcache:  Duration::new(120, 0),
+            pwcache: Duration::new(120, 0),
             pamcache: Duration::new(120, 0),
         });
         static ref PWCACHE: cache::Cache<String, unixuser::User> = new_pwcache();
@@ -140,13 +140,11 @@ pub(crate) mod cached {
 
     #[cfg(feature = "pam")]
     pub async fn pam_auth<'a>(
-        pam_auth: pam_sandboxed::PamAuth,
         service: &'a str,
         user: &'a str,
         pass: &'a str,
         remip: Option<&'a str>,
-    ) -> Result<(), pam_sandboxed::PamError>
-    {
+    ) -> Result<(), pam::PamError> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -163,13 +161,14 @@ pub(crate) mod cached {
             }
         }
 
-        let mut pam_auth = pam_auth;
-        match pam_auth.auth(&service, &user, &pass, remip).await {
+        let mut pam_auth = pam::Authenticator::with_password(service).expect("Failed to init PAM client.");
+        pam_auth.get_handler().set_credentials(&*user, &*pass);
+        match pam_auth.authenticate() {
             Err(e) => Err(e),
             Ok(()) => {
                 PAMCACHE.insert(key, user.to_owned());
                 Ok(())
-            },
+            }
         }
     }
 
